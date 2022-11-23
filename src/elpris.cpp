@@ -16,7 +16,7 @@ static size_t cw( char * contents, size_t size, size_t nmemb, std::string * data
 }
 
 
-std::string request()
+static std::string request()
 {
     CURLcode res_code = CURLE_FAILED_INIT;
     CURL * curl = curl_easy_init();
@@ -44,13 +44,48 @@ std::string request()
     return result;
 }
 
+
+static std::string find_definitions(GumboNode *node)
+{
+  std::string res = "";
+  GumboAttribute *attr;
+  if (node->type != GUMBO_NODE_ELEMENT)
+  {
+    return res;
+  }
+ 
+  if ((attr = gumbo_get_attribute(&node->v.element.attributes, "class")) &&
+      strstr(attr->value, "dtText") != NULL)
+  {
+      res += "hej"; //extract_text(node);
+    res += "\n";
+  }
+ 
+  GumboVector *children = &node->v.element.children;
+  for (int i = 0; i < children->length; ++i)
+  {
+    res += find_definitions(static_cast<GumboNode *>(children->data[i]));
+  }
+ 
+  return res;
+}
+
+static std::string scrape(std::string markup)
+{
+  std::string res = "entry";
+  GumboOutput *output = gumbo_parse_with_options(&kGumboDefaultOptions, markup.data(), markup.length());
+ 
+  res += find_definitions(output->root);
+ 
+  gumbo_destroy_output(&kGumboDefaultOptions, output);
+ 
+  return res;
+}
+
 int main()
 {
     
     auto html = request();
-    std::cout << html;
     
-    GumboOutput* output = gumbo_parse(html.c_str());
-    // Do stuff with output->root
-    gumbo_destroy_output(&kGumboDefaultOptions, output);
+    std::cout << scrape(html) << std::endl;
 }
