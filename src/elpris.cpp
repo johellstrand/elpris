@@ -60,7 +60,7 @@ static void find_definitions(GumboNode *node)
         col++;
         return;
     }
-    if( col > 1 && node->type == GUMBO_NODE_TEXT )
+    if( col == 2 && node->type == GUMBO_NODE_TEXT )
     {
         auto &[k,v] = tables[row-1];
         v =  node->v.text.text;
@@ -106,9 +106,7 @@ int main()
     // exit(1);
     auto html = request();
     auto t = std::move(scrape(html));
-    
-    std::cout << t.size() << std::endl;
-    
+        
     for( const auto& [k,v] : t )
     {
         const auto& [r,c] = v;
