@@ -1,3 +1,6 @@
+set(CMAKE_CXX_STANDARD 20)
+
+
 #find_package( gumbo-parser )
 include_directories( /opt/homebrew/opt/gumbo-parser/include/ )
 link_directories( /opt/homebrew/opt/gumbo-parser/lib/ )

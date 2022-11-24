@@ -30,7 +30,7 @@ static std::string request()
         curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, cw );
         curl_easy_setopt(curl, CURLOPT_WRITEDATA, & result);
         curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-//        curl_easy_setopt(curl, CURLOPT_USERAGENT, "simple scraper");
+        //        curl_easy_setopt(curl, CURLOPT_USERAGENT, "simple scraper");
         
         res_code = curl_easy_perform(curl);
         
@@ -43,49 +43,75 @@ static std::string request()
     
     return result;
 }
+static int row;
+static int col;
+#include <map>
+#include <utility>
 
+static std::map<int,std::pair<std::string,std::string> > tables;
 
-static std::string find_definitions(GumboNode *node)
+static void find_definitions(GumboNode *node)
 {
-  std::string res = "";
-  GumboAttribute *attr;
-  if (node->type != GUMBO_NODE_ELEMENT)
-  {
-    return res;
-  }
- 
-  if ((attr = gumbo_get_attribute(&node->v.element.attributes, "class")) &&
-      strstr(attr->value, "dtText") != NULL)
-  {
-      res += "hej"; //extract_text(node);
-    res += "\n";
-  }
- 
-  GumboVector *children = &node->v.element.children;
-  for (int i = 0; i < children->length; ++i)
-  {
-    res += find_definitions(static_cast<GumboNode *>(children->data[i]));
-  }
- 
-  return res;
+    GumboAttribute *attr;
+    if( col == 1 && node->type == GUMBO_NODE_TEXT )
+    {
+        auto &[k,v] = tables[row-1];
+        k =  node->v.text.text;
+        col++;
+        return;
+    }
+    if( col > 1 && node->type == GUMBO_NODE_TEXT )
+    {
+        auto &[k,v] = tables[row-1];
+        v =  node->v.text.text;
+        col++;
+        return;
+    }
+    
+    
+    if (node->type != GUMBO_NODE_ELEMENT)
+    {
+        return ;
+    }
+    
+    if ( node->v.element.tag == GUMBO_TAG_TR ) {row++; col = 0; }
+
+    if ( node->v.element.tag == GUMBO_TAG_TD && col == 0) col = 1;
+
+    GumboVector *children = &node->v.element.children;
+    for (int i = 0; i < children->length; ++i)
+    {
+        find_definitions(static_cast<GumboNode *>(children->data[i]));
+    }
+    
+    return ;
 }
 
-static std::string scrape(std::string markup)
+static std::map<int,std::pair<std::string,std::string> >  scrape(std::string markup)
 {
-  std::string res = "entry";
-  GumboOutput *output = gumbo_parse_with_options(&kGumboDefaultOptions, markup.data(), markup.length());
- 
-  res += find_definitions(output->root);
- 
-  gumbo_destroy_output(&kGumboDefaultOptions, output);
- 
-  return res;
+    std::string res = "entry";
+    GumboOutput *output = gumbo_parse_with_options(&kGumboDefaultOptions, markup.data(), markup.length());
+    
+    find_definitions(output->root);
+    
+    gumbo_destroy_output(&kGumboDefaultOptions, output);
+    
+    return tables;
 }
 
+static const char* ht = "<table class=\"table table-striped mb30\"><thead><tr><th>Månad</th> <th>Månadspris (SE3)</th></tr></thead><tbody><tr><td>November 2022 *</td><td>85,57 öre/kWh</td></tr><tr><td>Oktober 2022</td><td>80,65 öre/kWh</td></tr><tr><td>September 2022</td><td>228,63 öre/kWh</td></tr><tr><td>Augusti 2022</td><td>223,05 öre/kWh</td></tr><tr><td>Juli 2022</td><td>86,61 öre/kWh</td></tr><tr><td>Juni 2022</td><td>126,31 öre/kWh</td></tr><tr><td>Maj 2022</td><td>102,86 öre/kWh</td></tr><tr><td>April 2022</td><td>89,22 öre/kWh</td></tr><tr><td>Mars 2022</td><td>130,33 öre/kWh</td></tr><tr><td>Februari 2022</td><td>77,48 öre/kWh</td></tr><tr><td>Januari 2022</td><td>104,33 öre/kWh</td></tr><tr><td>December 2021</td><td>180,74 öre/kWh</td></tr><tr><td>November 2021</td><td>83,52 öre/kWh</td></tr></tbody></table>";
 int main()
 {
-    
+    // scrape( ht );
+    // exit(1);
     auto html = request();
+    auto t = std::move(scrape(html));
     
-    std::cout << scrape(html) << std::endl;
+    std::cout << t.size() << std::endl;
+    
+    for( const auto& [k,v] : t )
+    {
+        const auto& [r,c] = v;
+        std::cout << r << ":" << c << "\n";
+    }
 }
