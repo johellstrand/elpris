@@ -45,24 +45,25 @@ static std::string request()
 }
 static int row;
 static int col;
+static int tableid;
 #include <map>
 #include <utility>
 
-static std::map<int,std::pair<std::string,std::string> > tables;
+static std::map<int, std::map<int,std::pair<std::string,std::string> > > tables;
 
 static void find_definitions(GumboNode *node)
 {
     GumboAttribute *attr;
     if( col == 1 && node->type == GUMBO_NODE_TEXT )
     {
-        auto &[k,v] = tables[row-1];
+        auto &[k,v] = tables[tableid-1][row-1];
         k =  node->v.text.text;
         col++;
         return;
     }
     if( col == 2 && node->type == GUMBO_NODE_TEXT )
     {
-        auto &[k,v] = tables[row-1];
+        auto &[k,v] = tables[tableid-1][row-1];
         v =  node->v.text.text;
         col++;
         return;
@@ -74,6 +75,8 @@ static void find_definitions(GumboNode *node)
         return ;
     }
     
+    if ( node->v.element.tag == GUMBO_TAG_TABLE ) {tableid++; row=col = 0; }
+
     if ( node->v.element.tag == GUMBO_TAG_TR ) {row++; col = 0; }
 
     if ( node->v.element.tag == GUMBO_TAG_TD && col == 0) col = 1;
@@ -87,7 +90,7 @@ static void find_definitions(GumboNode *node)
     return ;
 }
 
-static std::map<int,std::pair<std::string,std::string> >  scrape(std::string markup)
+static std::map<int, std::map<int,std::pair<std::string,std::string> > >  scrape(std::string markup)
 {
     std::string res = "entry";
     GumboOutput *output = gumbo_parse_with_options(&kGumboDefaultOptions, markup.data(), markup.length());
@@ -107,9 +110,13 @@ int main()
     auto html = request();
     auto t = std::move(scrape(html));
         
-    for( const auto& [k,v] : t )
+    for( const auto& [a,b] : t )
     {
-        const auto& [r,c] = v;
-        std::cout << r << ":" << c << "\n";
+        for( const auto& [k,v] : b )
+        {
+            const auto& [r,c] = v;
+            printf("%2d %-25.25s %-25.25s\n", a, r.c_str(), c.c_str() );
+//            std::cout << a << "-" << r << ":" << c << "\n";
+        }
     }
 }
