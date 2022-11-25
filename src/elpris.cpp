@@ -43,23 +43,19 @@ static std::string request()
     
     return result;
 }
-static int row;
-static int col;
-static int tableid;
 #include <map>
 #include <vector>
 #include <utility>
 
 static std::map<int, std::map<int,std::vector<std::string> > > tables;
 
-static void save_html_table( GumboNode *node)
+static void save_html_table( GumboNode *node, std::map<int,std::vector<std::string> >& table, int &row )
 {
-    
+    int col = 0;
     GumboAttribute *attr;
-    if( col  && node->type == GUMBO_NODE_TEXT )
+    if(  node->type == GUMBO_NODE_TEXT )
     {
-        tables[tableid-1][row-1].push_back(node->v.text.text );
-        col++;
+        table[row-1].push_back(node->v.text.text );
         return;
     }
     
@@ -72,15 +68,18 @@ static void save_html_table( GumboNode *node)
     GumboVector *children = &node->v.element.children;
     for (int i = 0; i < children->length; ++i)
     {
-        save_html_table(static_cast<GumboNode *>(children->data[i]));
+        save_html_table(static_cast<GumboNode *>(children->data[i]), table, row );
     }
 }
 
 static void save_html_tables( GumboNode *node )
 {
+    int row = 0;
+    static int tableid=0;
+
     if( node->type != GUMBO_NODE_ELEMENT ) return;
 
-    if ( node->v.element.tag == GUMBO_TAG_TABLE ) { tableid++; row=col = 0; save_html_table( node );  }
+    if ( node->v.element.tag == GUMBO_TAG_TABLE ) { save_html_table( node, tables[tableid++], row );  }
     
     GumboVector *children = &node->v.element.children;
     for (int i = 0; i < children->length; ++i)
