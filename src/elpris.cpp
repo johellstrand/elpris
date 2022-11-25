@@ -105,8 +105,9 @@ static std::map<int, std::map<int,std::vector<std::string> > > scrape(std::strin
 #define FILECACHE_DIR "cache"
 #define FILECACHE "elpris_%s.html"
 #include <chrono>
-#include <format>
 #include <sstream>
+#include <iomanip>
+#include <filesystem>
 
 int main()
 {
