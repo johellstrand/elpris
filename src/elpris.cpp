@@ -52,36 +52,19 @@ static int tableid;
 
 static std::map<int, std::map<int,std::vector<std::string> > > tables;
 
-static void save_html_tables(GumboNode *node)
+static void save_html_table( GumboNode *node)
 {
+    
     GumboAttribute *attr;
-    if( col == 1 && node->type == GUMBO_NODE_TEXT )
-    {
-        tables[tableid-1][row-1].push_back(node->v.text.text );
-        col++;
-        return;
-    }
-    if( col == 2 && node->type == GUMBO_NODE_TEXT )
+    if( col  && node->type == GUMBO_NODE_TEXT )
     {
         tables[tableid-1][row-1].push_back(node->v.text.text );
         col++;
         return;
     }
     
-    
-    if (node->type != GUMBO_NODE_ELEMENT)
-    {
-        return ;
-    }
-    
-    if ( node->v.element.tag == GUMBO_TAG_TABLE ) {tableid++; row=col = 0; }
-    
-    if ( node->v.element.tag == GUMBO_TAG_TH )
-    {
-        row++; col = 0;
-        
-    }
-    
+    if (node->type != GUMBO_NODE_ELEMENT) return;
+
     if ( node->v.element.tag == GUMBO_TAG_TR ) {row++; col = 0; }
     
     if ( node->v.element.tag == GUMBO_TAG_TD && col == 0) col = 1;
@@ -89,9 +72,21 @@ static void save_html_tables(GumboNode *node)
     GumboVector *children = &node->v.element.children;
     for (int i = 0; i < children->length; ++i)
     {
+        save_html_table(static_cast<GumboNode *>(children->data[i]));
+    }
+}
+
+static void save_html_tables( GumboNode *node )
+{
+    if( node->type != GUMBO_NODE_ELEMENT ) return;
+
+    if ( node->v.element.tag == GUMBO_TAG_TABLE ) { tableid++; row=col = 0; save_html_table( node );  }
+    
+    GumboVector *children = &node->v.element.children;
+    for (int i = 0; i < children->length; ++i)
+    {
         save_html_tables(static_cast<GumboNode *>(children->data[i]));
     }
-    
     return ;
 }
 
