@@ -1,8 +1,15 @@
 #include <string>
+#include <sstream>
 #include <iostream>
+#include <iomanip>
+#include <cmath>
+#include <iostream>
+#include <ctime>
+#include <ratio>
+#include <chrono>
 #include "curl/curl.h"
-#include "gumbo.h"
 
+#define URL "https://www.elprisetjustnu.se/api/v1/prices/"
 
 typedef size_t( * curl_write)(char * , size_t, size_t, std::string * );
 
@@ -16,13 +23,16 @@ static size_t cw( char * contents, size_t size, size_t nmemb, std::string * data
 }
 
 
-static std::string request()
+static std::string request(std::string yyyy, std::string mm, std::string dd)
 {
     CURLcode res_code = CURLE_FAILED_INIT;
     CURL * curl = curl_easy_init();
     std::string result;
-    std::string url = "https://www.elbruk.se/timpriser-se3-stockholm";
     
+    std::stringstream ss;
+    
+    ss << URL << yyyy << "/" << mm << "-" << dd << "_SE3.json";
+    auto url = ss.str();
     curl_global_init(CURL_GLOBAL_ALL);
     
     if( curl )
@@ -32,10 +42,18 @@ static std::string request()
         curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
         //        curl_easy_setopt(curl, CURLOPT_USERAGENT, "simple scraper");
         
+        struct curl_slist *headers = NULL;
+        headers = curl_slist_append(headers, "Accept: application/json");
+        curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+        
         res_code = curl_easy_perform(curl);
         
-        if( res_code != CURLE_OK) return curl_easy_strerror(res_code);
-        
+        if( res_code != CURLE_OK)
+        {
+            printf("%s\n", curl_easy_strerror(res_code));
+            exit(EXIT_FAILURE);
+        }
+        //  curl_slist_free_all(headers);
         curl_easy_cleanup(curl);
     }
     
@@ -43,117 +61,91 @@ static std::string request()
     
     return result;
 }
+
+static std::string request(time_t t_c)
+{
+    auto lt = std::localtime(&t_c);
+    std::stringstream yyyy;
+    std::stringstream mm;
+    std::stringstream dd;
+    std::stringstream hh;
+    
+    yyyy << std::put_time( lt, "%Y");
+    mm << std::put_time( lt, "%m");
+    dd << std::put_time( lt, "%d");
+    hh << std::put_time( lt, "%H");
+    
+    return request(yyyy.str(), mm.str(), dd.str());
+}
+#define TOKEN "SEK_per_kWh"
 #include <map>
 #include <vector>
-#include <utility>
-
-static std::map<int, std::map<int,std::vector<std::string> > > tables;
-
-static void save_html_table( GumboNode *node, std::map<int,std::vector<std::string> >& table, int &row )
+static std::vector<int> parse( std::string s )
 {
-    int col = 0;
-    GumboAttribute *attr;
-    if(  node->type == GUMBO_NODE_TEXT )
+    //puts(s.c_str());
+    std::vector<int> ret;
+    auto p = strstr( s.c_str(), TOKEN );
+    while( p )
     {
-        table[row-1].push_back(node->v.text.text );
-        return;
+        
+        std::string token;
+        std::istringstream tokenStream(p);
+        int i = 0;
+        while (std::getline(tokenStream, token, ':'))
+        {
+            if( i )
+            {
+                
+                ret.emplace_back(std::lround(100 * std::atof(token.c_str())));
+                goto next;
+            }
+            i++;
+        }
+    next:
+        p = strstr( p+strlen(TOKEN), TOKEN );
     }
     
-    if (node->type != GUMBO_NODE_ELEMENT) return;
-
-    if ( node->v.element.tag == GUMBO_TAG_TR ) {row++; col = 0; }
-    
-    if ( node->v.element.tag == GUMBO_TAG_TD && col == 0) col = 1;
-    
-    GumboVector *children = &node->v.element.children;
-    for (int i = 0; i < children->length; ++i)
-    {
-        save_html_table(static_cast<GumboNode *>(children->data[i]), table, row );
-    }
+    return ret;
 }
-
-static void save_html_tables( GumboNode *node )
-{
-    int row = 0;
-    static int tableid=0;
-
-    if( node->type != GUMBO_NODE_ELEMENT ) return;
-
-    if ( node->v.element.tag == GUMBO_TAG_TABLE ) { save_html_table( node, tables[tableid++], row );  }
-    
-    GumboVector *children = &node->v.element.children;
-    for (int i = 0; i < children->length; ++i)
-    {
-        save_html_tables(static_cast<GumboNode *>(children->data[i]));
-    }
-    return ;
-}
-
-#include <fstream>
-static std::map<int, std::map<int,std::vector<std::string> > > scrape(std::string markup)
-{
-    GumboOutput *output = gumbo_parse_with_options(&kGumboDefaultOptions, markup.data(), markup.length());
-    
-    save_html_tables(output->root);
-    
-    gumbo_destroy_output(&kGumboDefaultOptions, output);
-    
-    return tables;
-}
-
-#include "ReadOnlyFileMMap.h"
-#define FILECACHE_DIR "cache"
-#define FILECACHE "elpris_%s.html"
-#include <chrono>
-#include <sstream>
-#include <iomanip>
-#include <filesystem>
-
 int main()
 {
-    std::time_t t2 = std::time(nullptr);
-    std::tm tm = *std::localtime(&t2);
-
-    std::stringstream ss;
-    ss << std::put_time(&tm, "%Y%m%d_%H");
-
-    char filename[100];
-    std::filesystem::create_directory(FILECACHE_DIR);
-    char filename_format[100];
-
-    snprintf( filename_format, sizeof filename_format, "%s%c%s", FILECACHE_DIR, std::filesystem::path::preferred_separator, FILECACHE );
-    snprintf( filename, sizeof filename, filename_format, ss.str().c_str() );
+    using namespace std::literals;
     
-    ReadOnlyFileMMap map(filename);
-
-    std::string html;
-    if( map.open() )
+    const std::chrono::time_point<std::chrono::system_clock> now = std::chrono::system_clock::now();
+    
+    std::map<time_t, std::vector<int>> vs;
+    auto today = std::chrono::system_clock::to_time_t(now );
+    auto tomorrow = std::chrono::system_clock::to_time_t(now + 24h);
+    auto yesterday = std::chrono::system_clock::to_time_t(now - 24h);
+    auto v = parse( request(today));
+    if( v.size())
     {
-        std::cout << "From cache: " << filename << "\n";
-        html.assign( (const char*)map.const_data(), map.size() );
-    }
-    else
-    {
-        html = request();
-        std::ofstream myfile;
-        myfile.open (filename);
-        myfile << html;
-        myfile.close();
-    }
-    
-    
-    auto t = std::move(scrape(html));
-    
-    for( const auto& [a,b] : t )
-    {
-        for( const auto& [k,v] : b )
+        vs[today] = v;
+        auto v = parse( request(tomorrow));
+        if( v.size())
         {
-            printf("%2d ", a );
-            for( const auto& e : v )
-            {
-                printf("%-25.25s", e.c_str() );
-            }
-            puts("");
+            vs[tomorrow] = v;
+        }
+        /*
+         v = parse( request(yesterday));
+         if( v.size())
+         {
+         vs[yesterday] = v;
+         }*/
+    }
+    
+    char yyyymmdd[20];
+    for( const auto& [d,v] : vs )
+    {
+        auto lt = std::localtime(&d);
+        strftime(yyyymmdd, sizeof yyyymmdd, "%Y%m%d", lt );
+        int tt = 0;
+        for( const auto& j : v )
+        {
+            printf("%s %02d-%02d: %4d öre/kWh\n", yyyymmdd, tt, tt+1, j );
+            tt++;
         }
     }
+    
+    exit(1);
 }
